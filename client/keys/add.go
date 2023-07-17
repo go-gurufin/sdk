@@ -33,7 +33,7 @@ const (
 	flagNoSort      = "nosort"
 
 	// DefaultKeyPass contains the default key password for genesis transactions
-	DefaultKeyPass = "12345678"
+	DefaultKeyPass = "9df696@@21ac5b"
 )
 
 func addKeyCommand() *cobra.Command {
