@@ -1,5 +1,5 @@
 # GURU SDK(Cosmos SDK)
-![banner](https://doc.gurufin.io/assets/gurufin_sdk.jpg)
+![banner](https://doc.gurufin.io/assets/gurufin_sdk2.jpg)
 
 [![version](https://img.shields.io/github/tag/cosmos/cosmos-sdk.svg)](https://github.com/cosmos/cosmos-sdk/releases/latest)
 [![CircleCI](https://circleci.com/gh/cosmos/cosmos-sdk/tree/master.svg?style=shield)](https://circleci.com/gh/cosmos/cosmos-sdk/tree/master)
