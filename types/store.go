@@ -1,28 +1,34 @@
 package types
 
 import (
-	cmn "github.com/tendermint/tendermint/libs/common"
+	fmt "fmt"
+	"sort"
+	"strings"
 
 	"github.com/cosmos/cosmos-sdk/store/types"
+	"github.com/cosmos/cosmos-sdk/types/kv"
 )
 
-// nolint - reexport
 type (
 	PruningOptions = types.PruningOptions
 )
 
-// nolint - reexport
 type (
-	Store            = types.Store
-	Committer        = types.Committer
-	CommitStore      = types.CommitStore
-	Queryable        = types.Queryable
-	MultiStore       = types.MultiStore
-	CacheMultiStore  = types.CacheMultiStore
-	CommitMultiStore = types.CommitMultiStore
-	KVStore          = types.KVStore
-	Iterator         = types.Iterator
+	Store                     = types.Store
+	Committer                 = types.Committer
+	CommitStore               = types.CommitStore
+	Queryable                 = types.Queryable
+	MultiStore                = types.MultiStore
+	CacheMultiStore           = types.CacheMultiStore
+	CommitMultiStore          = types.CommitMultiStore
+	MultiStorePersistentCache = types.MultiStorePersistentCache
+	KVStore                   = types.KVStore
+	Iterator                  = types.Iterator
 )
+
+// StoreDecoderRegistry defines each of the modules store decoders. Used for ImportExport
+// simulation.
+type StoreDecoderRegistry map[string]func(kvA, kvB kv.Pair) string
 
 // Iterator over all the keys with a certain prefix in ascending order
 func KVStorePrefixIterator(kvs KVStore, prefix []byte) Iterator {
@@ -34,14 +40,24 @@ func KVStoreReversePrefixIterator(kvs KVStore, prefix []byte) Iterator {
 	return types.KVStoreReversePrefixIterator(kvs, prefix)
 }
 
-// Compare two KVstores, return either the first key/value pair
-// at which they differ and whether or not they are equal, skipping
-// value comparison for a set of provided prefixes
-func DiffKVStores(a KVStore, b KVStore, prefixesToSkip [][]byte) (kvA cmn.KVPair, kvB cmn.KVPair, count int64, equal bool) {
+// KVStorePrefixIteratorPaginated returns iterator over items in the selected page.
+// Items iterated and skipped in ascending order.
+func KVStorePrefixIteratorPaginated(kvs KVStore, prefix []byte, page, limit uint) Iterator {
+	return types.KVStorePrefixIteratorPaginated(kvs, prefix, page, limit)
+}
+
+// KVStoreReversePrefixIteratorPaginated returns iterator over items in the selected page.
+// Items iterated and skipped in descending order.
+func KVStoreReversePrefixIteratorPaginated(kvs KVStore, prefix []byte, page, limit uint) Iterator {
+	return types.KVStoreReversePrefixIteratorPaginated(kvs, prefix, page, limit)
+}
+
+// DiffKVStores compares two KVstores and returns all the key/value pairs
+// that differ from one another. It also skips value comparison for a set of provided prefixes
+func DiffKVStores(a KVStore, b KVStore, prefixesToSkip [][]byte) (kvAs, kvBs []kv.Pair) {
 	return types.DiffKVStores(a, b, prefixesToSkip)
 }
 
-// nolint - reexport
 type (
 	CacheKVStore  = types.CacheKVStore
 	CommitKVStore = types.CommitKVStore
@@ -50,37 +66,52 @@ type (
 	CommitID      = types.CommitID
 )
 
-// nolint - reexport
 type StoreType = types.StoreType
 
-// nolint - reexport
 const (
 	StoreTypeMulti     = types.StoreTypeMulti
 	StoreTypeDB        = types.StoreTypeDB
 	StoreTypeIAVL      = types.StoreTypeIAVL
 	StoreTypeTransient = types.StoreTypeTransient
+	StoreTypeMemory    = types.StoreTypeMemory
 )
 
-// nolint - reexport
 type (
 	StoreKey          = types.StoreKey
+	CapabilityKey     = types.CapabilityKey
 	KVStoreKey        = types.KVStoreKey
 	TransientStoreKey = types.TransientStoreKey
+	MemoryStoreKey    = types.MemoryStoreKey
 )
 
+// assertNoCommonPrefix will panic if there are two keys: k1 and k2 in keys, such that
+// k1 is a prefix of k2
+func assertNoPrefix(keys []string) {
+	sorted := make([]string, len(keys))
+	copy(sorted, keys)
+	sort.Strings(sorted)
+	for i := 1; i < len(sorted); i++ {
+		if strings.HasPrefix(sorted[i], sorted[i-1]) {
+			panic(fmt.Sprint("Potential key collision between KVStores:", sorted[i], " - ", sorted[i-1]))
+		}
+	}
+}
+
 // NewKVStoreKey returns a new pointer to a KVStoreKey.
-// Use a pointer so keys don't collide.
 func NewKVStoreKey(name string) *KVStoreKey {
 	return types.NewKVStoreKey(name)
 }
 
 // NewKVStoreKeys returns a map of new  pointers to KVStoreKey's.
-// Uses pointers so keys don't collide.
+// The function will panic if there is a potential conflict in names (see `assertNoPrefix`
+// function for more details).
 func NewKVStoreKeys(names ...string) map[string]*KVStoreKey {
-	keys := make(map[string]*KVStoreKey)
-	for _, name := range names {
-		keys[name] = NewKVStoreKey(name)
+	assertNoPrefix(names)
+	keys := make(map[string]*KVStoreKey, len(names))
+	for _, n := range names {
+		keys[n] = NewKVStoreKey(n)
 	}
+
 	return keys
 }
 
@@ -92,11 +123,29 @@ func NewTransientStoreKey(name string) *TransientStoreKey {
 
 // NewTransientStoreKeys constructs a new map of TransientStoreKey's
 // Must return pointers according to the ocap principle
+// The function will panic if there is a potential conflict in names (see `assertNoPrefix`
+// function for more details).
 func NewTransientStoreKeys(names ...string) map[string]*TransientStoreKey {
+	assertNoPrefix(names)
 	keys := make(map[string]*TransientStoreKey)
-	for _, name := range names {
-		keys[name] = NewTransientStoreKey(name)
+	for _, n := range names {
+		keys[n] = NewTransientStoreKey(n)
 	}
+
+	return keys
+}
+
+// NewMemoryStoreKeys constructs a new map matching store key names to their
+// respective MemoryStoreKey references.
+// The function will panic if there is a potential conflict in names (see `assertNoPrefix`
+// function for more details).
+func NewMemoryStoreKeys(names ...string) map[string]*MemoryStoreKey {
+	assertNoPrefix(names)
+	keys := make(map[string]*MemoryStoreKey)
+	for _, n := range names {
+		keys[n] = types.NewMemoryStoreKey(n)
+	}
+
 	return keys
 }
 
@@ -126,25 +175,21 @@ type TraceContext = types.TraceContext
 
 // --------------------------------------
 
-// nolint - reexport
 type (
 	Gas       = types.Gas
 	GasMeter  = types.GasMeter
 	GasConfig = types.GasConfig
 )
 
-// nolint - reexport
 func NewGasMeter(limit Gas) GasMeter {
 	return types.NewGasMeter(limit)
 }
 
-// nolint - reexport
 type (
 	ErrorOutOfGas    = types.ErrorOutOfGas
 	ErrorGasOverflow = types.ErrorGasOverflow
 )
 
-// nolint - reexport
 func NewInfiniteGasMeter() GasMeter {
 	return types.NewInfiniteGasMeter()
 }

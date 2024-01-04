@@ -1,22 +1,34 @@
 # Updating the docs
 
-If you want to open a PR on the Cosmos SDK to update the documentation, please follow the guidelines in the [`CONTRIBUTING.md`](https://github.com/cosmos/cosmos-sdk/tree/master/CONTRIBUTING.md)
+If you want to open a PR in Cosmos SDK to update the documentation, please follow the guidelines in [`CONTRIBUTING.md`](https://github.com/cosmos/cosmos-sdk/tree/master/CONTRIBUTING.md#updating-documentation).
+
+## Internationalization
+
+- Translations for documentation live in a `docs/<locale>/` folder, where `<locale>` is the language code for a specific language. For example, `zh` for Chinese, `ko` for Korean, `ru` for Russian, etc.
+- Each `docs/<locale>/` folder must follow the same folder structure within `docs/`, but only content in the following folders needs to be translated and included in the respective `docs/<locale>/` folder:
+    - `docs/basics/`
+    - `docs/building-modules/`
+    - `docs/core/`
+    - `docs/ibc/`
+    - `docs/intro/`
+    - `docs/migrations/`
+    - `docs/run-node/`
+- Each `docs/<locale>/` folder must also have a `README.md` that includes a translated version of both the layout and content within the root-level [`README.md`](https://github.com/cosmos/cosmos-sdk/tree/master/docs/README.md). The layout defined in the `README.md` is used to build the homepage.
+- Always translate content living on `master` unless you are revising documentation for a specific release. Translated documentation like the root-level documentation is semantically versioned.
+- For additional configuration options, please see [VuePress Internationalization](https://vuepress.vuejs.org/guide/i18n.html).
 
 ## Docs Build Workflow
 
-The documentation for the Cosmos SDK is hosted at:
-
-- https://cosmos.network/docs/ and
-- https://cosmos-staging.interblock.io/docs/
+The documentation for the Cosmos SDK is hosted at https://cosmos.network/docs/
 
 built from the files in this (`/docs`) directory for
 [master](https://github.com/cosmos/cosmos-sdk/tree/master/docs).
 
 ### How It Works
 
-There is a CircleCI job listening for changes in the `/docs` directory, on both
-the  `master` and `develop` branches. Any updates to files in this directory
-on those branches will automatically trigger a website deployment. Under the hood,
+There is a CircleCI job listening for changes in the `/docs` directory, on
+the `master` branch. Any updates to files in this directory
+on that branch will automatically trigger a website deployment. Under the hood,
 the private website repository has a `make build-docs` target consumed by a CircleCI job in that repo.
 
 ## README
@@ -62,34 +74,27 @@ to send users to the GitHub.
 
 ## Building Locally
 
-To build and serve the documentation locally, run:
+Make sure you are in the `docs` directory and run the following commands:
 
-```bash
-npm install -g vuepress
+```sh
+rm -rf node_modules
 ```
 
-then change the following line in the `config.js`:
+This command will remove old version of the visual theme and required packages. This step is optional.
 
-```js
-base: "/docs/",
+```sh
+npm install
 ```
 
-to:
+Install the theme and all dependencies.
 
-```js
-base: "/",
+```sh
+npm run serve
 ```
 
-Finally, go up one directory to the root of the repo and run:
+Run `pre` and `post` hooks and start a hot-reloading web-server. See output of this command for the URL (it is often https://localhost:8080).
 
-```bash
-# from root of repo
-vuepress build docs
-cd dist/docs
-python -m SimpleHTTPServer 8080
-```
-
-then navigate to localhost:8080 in your browser.
+To build documentation as a static website run `npm run build`. You will find the website in `.vuepress/dist` directory.
 
 ## Build RPC Docs
 
@@ -106,19 +111,22 @@ We are using [Algolia](https://www.algolia.com) to power full-text search. This 
 ## Consistency
 
 Because the build processes are identical (as is the information contained herein), this file should be kept in sync as
-much as possible with its [counterpart in the Tendermint Core repo](https://github.com/tendermint/tendermint/blob/master/docs/DOCS_README.md).
+much as possible with its [counterpart in the Tendermint Core repo](https://github.com/tendermint/tendermint/blob/v0.34.0/docs/DOCS_README.md).
 
 ### Update and Build the RPC docs
 
 1. Execute the following command at the root directory to install the swagger-ui generate tool.
-    ```bash
-    make tools
-    ```
+
+   ```bash
+   make tools
+   ```
+
 2. Edit API docs
-    1. Directly Edit API docs manually: `client/lcd/swagger-ui/swagger.yaml`.
-    2. Edit API docs within the [Swagger Editor](https://editor.swagger.io/). Please refer to this [document](https://swagger.io/docs/specification/2-0/basic-structure/) for the correct structure in `.yaml`.
+   1. Directly Edit API docs manually: `client/lcd/swagger-ui/swagger.yaml`.
+   2. Edit API docs within the [Swagger Editor](https://editor.swagger.io/). Please refer to this [document](https://swagger.io/docs/specification/2-0/basic-structure/) for the correct structure in `.yaml`.
 3. Download `swagger.yaml` and replace the old `swagger.yaml` under fold `client/lcd/swagger-ui`.
 4. Compile gaiacli
-    ```bash
-    make install
-    ```
+
+   ```bash
+   make install
+   ```

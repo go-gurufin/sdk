@@ -22,14 +22,13 @@ func (h Hooks) AfterValidatorCreated(ctx sdk.Context, valAddr sdk.ValAddress) {
 	h.k.initializeValidator(ctx, val)
 }
 
-// cleanup for after validator is removed
+// AfterValidatorRemoved performs clean up after a validator is removed
 func (h Hooks) AfterValidatorRemoved(ctx sdk.Context, _ sdk.ConsAddress, valAddr sdk.ValAddress) {
-
 	// fetch outstanding
-	outstanding := h.k.GetValidatorOutstandingRewards(ctx, valAddr)
+	outstanding := h.k.GetValidatorOutstandingRewardsCoins(ctx, valAddr)
 
 	// force-withdraw commission
-	commission := h.k.GetValidatorAccumulatedCommission(ctx, valAddr)
+	commission := h.k.GetValidatorAccumulatedCommission(ctx, valAddr).Commission
 	if !commission.IsZero() {
 		// subtract from outstanding
 		outstanding = outstanding.Sub(commission)
@@ -39,24 +38,25 @@ func (h Hooks) AfterValidatorRemoved(ctx sdk.Context, _ sdk.ConsAddress, valAddr
 
 		// remainder to community pool
 		feePool := h.k.GetFeePool(ctx)
-		feePool.CommunityPool = feePool.CommunityPool.Add(remainder)
+		feePool.CommunityPool = feePool.CommunityPool.Add(remainder...)
 		h.k.SetFeePool(ctx, feePool)
 
 		// add to validator account
 		if !coins.IsZero() {
-
 			accAddr := sdk.AccAddress(valAddr)
 			withdrawAddr := h.k.GetDelegatorWithdrawAddr(ctx, accAddr)
-			err := h.k.supplyKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, withdrawAddr, coins)
-			if err != nil {
+
+			if err := h.k.bankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, withdrawAddr, coins); err != nil {
 				panic(err)
 			}
 		}
 	}
 
-	// add outstanding to community pool
+	// Add outstanding to community pool
+	// The validator is removed only after it has no more delegations.
+	// This operation sends only the remaining dust to the community pool.
 	feePool := h.k.GetFeePool(ctx)
-	feePool.CommunityPool = feePool.CommunityPool.Add(outstanding)
+	feePool.CommunityPool = feePool.CommunityPool.Add(outstanding...)
 	h.k.SetFeePool(ctx, feePool)
 
 	// delete outstanding
@@ -78,13 +78,14 @@ func (h Hooks) AfterValidatorRemoved(ctx sdk.Context, _ sdk.ConsAddress, valAddr
 // increment period
 func (h Hooks) BeforeDelegationCreated(ctx sdk.Context, delAddr sdk.AccAddress, valAddr sdk.ValAddress) {
 	val := h.k.stakingKeeper.Validator(ctx, valAddr)
-	h.k.incrementValidatorPeriod(ctx, val)
+	h.k.IncrementValidatorPeriod(ctx, val)
 }
 
 // withdraw delegation rewards (which also increments period)
 func (h Hooks) BeforeDelegationSharesModified(ctx sdk.Context, delAddr sdk.AccAddress, valAddr sdk.ValAddress) {
 	val := h.k.stakingKeeper.Validator(ctx, valAddr)
 	del := h.k.stakingKeeper.Delegation(ctx, delAddr, valAddr)
+
 	if _, err := h.k.withdrawDelegationRewards(ctx, val, del); err != nil {
 		panic(err)
 	}
@@ -100,8 +101,19 @@ func (h Hooks) BeforeValidatorSlashed(ctx sdk.Context, valAddr sdk.ValAddress, f
 	h.k.updateValidatorSlashFraction(ctx, valAddr, fraction)
 }
 
-// nolint - unused hooks
+// Withdraw rewards before removing record
+func (h Hooks) BeforeTokenizeShareRecordRemoved(ctx sdk.Context, recordID uint64) error {
+	err := h.k.WithdrawSingleShareRecordReward(ctx, recordID)
+	if err != nil {
+		h.k.Logger(ctx).Error(err.Error())
+	}
+	return err
+}
+
 func (h Hooks) BeforeValidatorModified(_ sdk.Context, _ sdk.ValAddress)                         {}
 func (h Hooks) AfterValidatorBonded(_ sdk.Context, _ sdk.ConsAddress, _ sdk.ValAddress)         {}
 func (h Hooks) AfterValidatorBeginUnbonding(_ sdk.Context, _ sdk.ConsAddress, _ sdk.ValAddress) {}
 func (h Hooks) BeforeDelegationRemoved(_ sdk.Context, _ sdk.AccAddress, _ sdk.ValAddress)       {}
+func (h Hooks) AfterUnbondingInitiated(_ sdk.Context, _ uint64) error {
+	return nil
+}

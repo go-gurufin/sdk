@@ -5,7 +5,7 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/distribution/types"
-	"github.com/cosmos/cosmos-sdk/x/staking/exported"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 )
 
 // register all distribution invariants
@@ -47,7 +47,7 @@ func NonNegativeOutstandingInvariant(k Keeper) sdk.Invariant {
 		var outstanding sdk.DecCoins
 
 		k.IterateValidatorOutstandingRewards(ctx, func(addr sdk.ValAddress, rewards types.ValidatorOutstandingRewards) (stop bool) {
-			outstanding = rewards
+			outstanding = rewards.GetRewards()
 			if outstanding.IsAnyNegative() {
 				count++
 				msg += fmt.Sprintf("\t%v has negative outstanding coins: %v\n", addr, outstanding)
@@ -64,7 +64,6 @@ func NonNegativeOutstandingInvariant(k Keeper) sdk.Invariant {
 // CanWithdrawInvariant checks that current rewards can be completely withdrawn
 func CanWithdrawInvariant(k Keeper) sdk.Invariant {
 	return func(ctx sdk.Context) (string, bool) {
-
 		// cache, we don't want to write changes
 		ctx, _ = ctx.CacheContext()
 
@@ -77,7 +76,7 @@ func CanWithdrawInvariant(k Keeper) sdk.Invariant {
 		}
 
 		// iterate over all validators
-		k.stakingKeeper.IterateValidators(ctx, func(_ int64, val exported.ValidatorI) (stop bool) {
+		k.stakingKeeper.IterateValidators(ctx, func(_ int64, val stakingtypes.ValidatorI) (stop bool) {
 			_, _ = k.WithdrawValidatorCommission(ctx, val.GetOperator())
 
 			delegationAddrs, ok := valDelegationAddrs[val.GetOperator().String()]
@@ -89,15 +88,15 @@ func CanWithdrawInvariant(k Keeper) sdk.Invariant {
 				}
 			}
 
-			remaining = k.GetValidatorOutstandingRewards(ctx, val.GetOperator())
-			if len(remaining) > 0 && remaining[0].Amount.LT(sdk.ZeroDec()) {
+			remaining = k.GetValidatorOutstandingRewardsCoins(ctx, val.GetOperator())
+			if len(remaining) > 0 && remaining[0].Amount.IsNegative() {
 				return true
 			}
 
 			return false
 		})
 
-		broken := len(remaining) > 0 && remaining[0].Amount.LT(sdk.ZeroDec())
+		broken := len(remaining) > 0 && remaining[0].Amount.IsNegative()
 		return sdk.FormatInvariant(types.ModuleName, "can withdraw",
 			fmt.Sprintf("remaining coins: %v\n", remaining)), broken
 	}
@@ -106,9 +105,8 @@ func CanWithdrawInvariant(k Keeper) sdk.Invariant {
 // ReferenceCountInvariant checks that the number of historical rewards records is correct
 func ReferenceCountInvariant(k Keeper) sdk.Invariant {
 	return func(ctx sdk.Context) (string, bool) {
-
 		valCount := uint64(0)
-		k.stakingKeeper.IterateValidators(ctx, func(_ int64, val exported.ValidatorI) (stop bool) {
+		k.stakingKeeper.IterateValidators(ctx, func(_ int64, val stakingtypes.ValidatorI) (stop bool) {
 			valCount++
 			return false
 		})
@@ -137,22 +135,25 @@ func ReferenceCountInvariant(k Keeper) sdk.Invariant {
 // is consistent with the sum of validator outstanding rewards
 func ModuleAccountInvariant(k Keeper) sdk.Invariant {
 	return func(ctx sdk.Context) (string, bool) {
-
 		var expectedCoins sdk.DecCoins
 		k.IterateValidatorOutstandingRewards(ctx, func(_ sdk.ValAddress, rewards types.ValidatorOutstandingRewards) (stop bool) {
-			expectedCoins = expectedCoins.Add(rewards)
+			expectedCoins = expectedCoins.Add(rewards.Rewards...)
 			return false
 		})
 
 		communityPool := k.GetFeePoolCommunityCoins(ctx)
-		expectedInt, _ := expectedCoins.Add(communityPool).TruncateDecimal()
+		expectedInt, _ := expectedCoins.Add(communityPool...).TruncateDecimal()
 
 		macc := k.GetDistributionAccount(ctx)
+		balances := k.bankKeeper.GetAllBalances(ctx, macc.GetAddress())
 
-		broken := !macc.GetCoins().IsEqual(expectedInt)
-		return sdk.FormatInvariant(types.ModuleName, "ModuleAccount coins",
+		broken := !balances.IsEqual(expectedInt)
+		return sdk.FormatInvariant(
+			types.ModuleName, "ModuleAccount coins",
 			fmt.Sprintf("\texpected ModuleAccount coins:     %s\n"+
 				"\tdistribution ModuleAccount coins: %s\n",
-				expectedInt, macc.GetCoins())), broken
+				expectedInt, balances,
+			),
+		), broken
 	}
 }

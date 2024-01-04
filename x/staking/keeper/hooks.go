@@ -77,3 +77,19 @@ func (k Keeper) BeforeValidatorSlashed(ctx sdk.Context, valAddr sdk.ValAddress, 
 		k.hooks.BeforeValidatorSlashed(ctx, valAddr, fraction)
 	}
 }
+
+// This is called when an UnbondingDelegationEntry is first created
+func (k Keeper) AfterUnbondingInitiated(ctx sdk.Context, id uint64) error {
+	if k.hooks != nil {
+		return k.hooks.AfterUnbondingInitiated(ctx, id)
+	}
+	return nil
+}
+
+// This is called before a TokenizeShareRecord is removed
+func (k Keeper) BeforeTokenizeShareRecordRemoved(ctx sdk.Context, recordID uint64) error {
+	if k.hooks != nil {
+		return k.hooks.BeforeTokenizeShareRecordRemoved(ctx, recordID)
+	}
+	return nil
+}

@@ -3,51 +3,61 @@ package server
 import (
 	"fmt"
 
-	"github.com/cosmos/cosmos-sdk/crypto/keys"
-
-	clkeys "github.com/cosmos/cosmos-sdk/client/keys"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
-// GenerateCoinKey returns the address of a public key, along with the secret
-// phrase to recover the private key.
-func GenerateCoinKey() (sdk.AccAddress, string, error) {
-
-	// generate a private key, with recovery phrase
-	info, secret, err := clkeys.NewInMemoryKeyBase().CreateMnemonic(
-		"name", keys.English, "pass", keys.Secp256k1)
+// Deprecated: GenerateCoinKey generates a new key mnemonic along with its addrress.
+// Please use testutils.GenerateCoinKey instead.
+func GenerateCoinKey(algo keyring.SignatureAlgo) (sdk.AccAddress, string, error) {
+	// generate a private key, with mnemonic
+	info, secret, err := keyring.NewInMemory().NewMnemonic(
+		"name",
+		keyring.English,
+		sdk.GetConfig().GetFullBIP44Path(),
+		keyring.DefaultBIP39Passphrase,
+		algo,
+	)
 	if err != nil {
-		return sdk.AccAddress([]byte{}), "", err
-	}
-	addr := info.GetPubKey().Address()
-	return sdk.AccAddress(addr), secret, nil
-}
-
-// GenerateSaveCoinKey returns the address of a public key, along with the secret
-// phrase to recover the private key.
-func GenerateSaveCoinKey(clientRoot, keyName, keyPass string,
-	overwrite bool) (sdk.AccAddress, string, error) {
-
-	// get the keystore from the client
-	keybase, err := clkeys.NewKeyBaseFromDir(clientRoot)
-	if err != nil {
-		return sdk.AccAddress([]byte{}), "", err
-	}
-
-	// ensure no overwrite
-	if !overwrite {
-		_, err := keybase.Get(keyName)
-		if err == nil {
-			return sdk.AccAddress([]byte{}), "", fmt.Errorf(
-				"key already exists, overwrite is disabled (clientRoot: %s)", clientRoot)
-		}
-	}
-
-	// generate a private key, with recovery phrase
-	info, secret, err := keybase.CreateMnemonic(keyName, keys.English, keyPass, keys.Secp256k1)
-	if err != nil {
-		return sdk.AccAddress([]byte{}), "", err
+		return sdk.AccAddress{}, "", err
 	}
 
 	return sdk.AccAddress(info.GetPubKey().Address()), secret, nil
+}
+
+// Deprecated: GenerateSaveCoinKey generates a new key mnemonic with its addrress.
+// If mnemonic is provided then it's used for key generation.
+// The key is saved in the keyring. The function returns error if overwrite=true and the key
+// already exists.
+// Please use testutils.GenerateSaveCoinKey instead.
+func GenerateSaveCoinKey(
+	keybase keyring.Keyring,
+	keyName string,
+	overwrite bool,
+	algo keyring.SignatureAlgo,
+) (sdk.AccAddress, string, error) {
+	exists := false
+	_, err := keybase.Key(keyName)
+	if err == nil {
+		exists = true
+	}
+
+	// ensure no overwrite
+	if !overwrite && exists {
+		return sdk.AccAddress{}, "", fmt.Errorf("key already exists, overwrite is disabled")
+	}
+
+	// remove the old key by name if it exists
+	if exists {
+		if err := keybase.Delete(keyName); err != nil {
+			return sdk.AccAddress{}, "", fmt.Errorf("failed to overwrite key")
+		}
+	}
+
+	k, mnemonic, err := keybase.NewMnemonic(keyName, keyring.English, sdk.GetConfig().GetFullBIP44Path(), keyring.DefaultBIP39Passphrase, algo)
+	if err != nil {
+		return sdk.AccAddress{}, "", err
+	}
+
+	return k.GetAddress(), mnemonic, nil
 }

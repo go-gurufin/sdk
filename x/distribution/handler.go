@@ -1,97 +1,58 @@
 package distribution
 
 import (
-	"fmt"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/cosmos/cosmos-sdk/x/distribution/keeper"
 	"github.com/cosmos/cosmos-sdk/x/distribution/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 )
 
 func NewHandler(k keeper.Keeper) sdk.Handler {
-	return func(ctx sdk.Context, msg sdk.Msg) sdk.Result {
+	msgServer := keeper.NewMsgServerImpl(k)
+
+	return func(ctx sdk.Context, msg sdk.Msg) (*sdk.Result, error) {
 		ctx = ctx.WithEventManager(sdk.NewEventManager())
 
 		switch msg := msg.(type) {
-		case types.MsgSetWithdrawAddress:
-			return handleMsgModifyWithdrawAddress(ctx, msg, k)
+		case *types.MsgSetWithdrawAddress:
+			res, err := msgServer.SetWithdrawAddress(sdk.WrapSDKContext(ctx), msg)
+			return sdk.WrapServiceResult(ctx, res, err)
 
-		case types.MsgWithdrawDelegatorReward:
-			return handleMsgWithdrawDelegatorReward(ctx, msg, k)
+		case *types.MsgWithdrawDelegatorReward:
+			res, err := msgServer.WithdrawDelegatorReward(sdk.WrapSDKContext(ctx), msg)
+			return sdk.WrapServiceResult(ctx, res, err)
 
-		case types.MsgWithdrawValidatorCommission:
-			return handleMsgWithdrawValidatorCommission(ctx, msg, k)
+		case *types.MsgWithdrawValidatorCommission:
+			res, err := msgServer.WithdrawValidatorCommission(sdk.WrapSDKContext(ctx), msg)
+			return sdk.WrapServiceResult(ctx, res, err)
+
+		case *types.MsgFundCommunityPool:
+			res, err := msgServer.FundCommunityPool(sdk.WrapSDKContext(ctx), msg)
+			return sdk.WrapServiceResult(ctx, res, err)
+
+		case *types.MsgWithdrawTokenizeShareRecordReward:
+			res, err := msgServer.WithdrawTokenizeShareRecordReward(sdk.WrapSDKContext(ctx), msg)
+			return sdk.WrapServiceResult(ctx, res, err)
+
+		case *types.MsgWithdrawAllTokenizeShareRecordReward:
+			res, err := msgServer.WithdrawAllTokenizeShareRecordReward(sdk.WrapSDKContext(ctx), msg)
+			return sdk.WrapServiceResult(ctx, res, err)
 
 		default:
-			errMsg := fmt.Sprintf("unrecognized distribution message type: %T", msg)
-			return sdk.ErrUnknownRequest(errMsg).Result()
+			return nil, sdkerrors.Wrapf(sdkerrors.ErrUnknownRequest, "unrecognized distribution message type: %T", msg)
 		}
 	}
 }
 
-// These functions assume everything has been authenticated (ValidateBasic passed, and signatures checked)
-
-func handleMsgModifyWithdrawAddress(ctx sdk.Context, msg types.MsgSetWithdrawAddress, k keeper.Keeper) sdk.Result {
-	err := k.SetWithdrawAddr(ctx, msg.DelegatorAddress, msg.WithdrawAddress)
-	if err != nil {
-		return err.Result()
-	}
-
-	ctx.EventManager().EmitEvent(
-		sdk.NewEvent(
-			sdk.EventTypeMessage,
-			sdk.NewAttribute(sdk.AttributeKeyModule, types.AttributeValueCategory),
-			sdk.NewAttribute(sdk.AttributeKeySender, msg.DelegatorAddress.String()),
-		),
-	)
-
-	return sdk.Result{Events: ctx.EventManager().Events()}
-}
-
-func handleMsgWithdrawDelegatorReward(ctx sdk.Context, msg types.MsgWithdrawDelegatorReward, k keeper.Keeper) sdk.Result {
-	_, err := k.WithdrawDelegationRewards(ctx, msg.DelegatorAddress, msg.ValidatorAddress)
-	if err != nil {
-		return err.Result()
-	}
-
-	ctx.EventManager().EmitEvent(
-		sdk.NewEvent(
-			sdk.EventTypeMessage,
-			sdk.NewAttribute(sdk.AttributeKeyModule, types.AttributeValueCategory),
-			sdk.NewAttribute(sdk.AttributeKeySender, msg.DelegatorAddress.String()),
-		),
-	)
-
-	return sdk.Result{Events: ctx.EventManager().Events()}
-}
-
-func handleMsgWithdrawValidatorCommission(ctx sdk.Context, msg types.MsgWithdrawValidatorCommission, k keeper.Keeper) sdk.Result {
-	_, err := k.WithdrawValidatorCommission(ctx, msg.ValidatorAddress)
-	if err != nil {
-		return err.Result()
-	}
-
-	ctx.EventManager().EmitEvent(
-		sdk.NewEvent(
-			sdk.EventTypeMessage,
-			sdk.NewAttribute(sdk.AttributeKeyModule, types.AttributeValueCategory),
-			sdk.NewAttribute(sdk.AttributeKeySender, msg.ValidatorAddress.String()),
-		),
-	)
-
-	return sdk.Result{Events: ctx.EventManager().Events()}
-}
-
-func NewCommunityPoolSpendProposalHandler(k Keeper) govtypes.Handler {
-	return func(ctx sdk.Context, content govtypes.Content) sdk.Error {
+func NewCommunityPoolSpendProposalHandler(k keeper.Keeper) govtypes.Handler {
+	return func(ctx sdk.Context, content govtypes.Content) error {
 		switch c := content.(type) {
-		case types.CommunityPoolSpendProposal:
+		case *types.CommunityPoolSpendProposal:
 			return keeper.HandleCommunityPoolSpendProposal(ctx, k, c)
 
 		default:
-			errMsg := fmt.Sprintf("unrecognized distr proposal content type: %T", c)
-			return sdk.ErrUnknownRequest(errMsg)
+			return sdkerrors.Wrapf(sdkerrors.ErrUnknownRequest, "unrecognized distr proposal content type: %T", c)
 		}
 	}
 }

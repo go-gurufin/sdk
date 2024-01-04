@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto/ed25519"
+
+	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 var addr = sdk.AccAddress(ed25519.GenPrivKey().PubKey().Address())
@@ -36,7 +37,6 @@ func TestProposalKeys(t *testing.T) {
 }
 
 func TestDepositKeys(t *testing.T) {
-
 	key := DepositsKey(2)
 	proposalID := SplitProposalKey(key)
 	require.Equal(t, int(proposalID), 2)
@@ -45,15 +45,9 @@ func TestDepositKeys(t *testing.T) {
 	proposalID, depositorAddr := SplitKeyDeposit(key)
 	require.Equal(t, int(proposalID), 2)
 	require.Equal(t, addr, depositorAddr)
-
-	// invalid key
-	addr2 := sdk.AccAddress("test1")
-	key = DepositKey(5, addr2)
-	require.Panics(t, func() { SplitKeyDeposit(key) })
 }
 
 func TestVoteKeys(t *testing.T) {
-
 	key := VotesKey(2)
 	proposalID := SplitProposalKey(key)
 	require.Equal(t, int(proposalID), 2)
@@ -62,9 +56,4 @@ func TestVoteKeys(t *testing.T) {
 	proposalID, voterAddr := SplitKeyDeposit(key)
 	require.Equal(t, int(proposalID), 2)
 	require.Equal(t, addr, voterAddr)
-
-	// invalid key
-	addr2 := sdk.AccAddress("test1")
-	key = VoteKey(5, addr2)
-	require.Panics(t, func() { SplitKeyVote(key) })
 }
